@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dazz Drones CRM
 
-## Getting Started
+A Next.js CRM dashboard for **Dazz Drones** — European drone services. Connects to your existing Supabase database and provides a clean blue-and-white interface to manage all incoming data.
 
-First, run the development server:
+## Features
+
+- **Dashboard overview** — Stats and counts across all Supabase tables
+- **Booking Requests** — View, edit, and update status of incoming requests
+- **Convert to Booking** — One-click conversion creates a record in the `bookings` table
+- **All data tables** — Callback requests, contact forms, career applications, enterprise leads, pilot data, users, and more
+
+## Setup
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure Supabase
+
+Copy the example env file and add your Supabase credentials:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Edit `.env.local`:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
+
+Find these in **Supabase Dashboard → Project Settings → API**.
+
+### 3. Run the SQL migration
+
+In the Supabase SQL Editor, run the migration at:
+
+```
+supabase/migrations/001_create_bookings_table.sql
+```
+
+This creates the `bookings` table and adds a `status` column to `booking_requests` if missing.
+
+### 4. Start the dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Booking Workflow
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. New requests appear in **Booking Requests**
+2. Click **View** to open a request
+3. Edit fields and change status (pending → reviewing → rejected)
+4. Click **Convert to Booking** to create a confirmed booking
+5. Converted bookings appear in the **Bookings** section
 
-## Learn More
+## Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Next.js 16 (App Router)
+- TypeScript
+- Tailwind CSS
+- Supabase
+- Lucide Icons
