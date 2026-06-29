@@ -8,10 +8,12 @@ import {
 } from "@/lib/actions";
 import { formatLabel, getDisplayValue } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { DeleteRecordButton } from "@/components/ui/DeleteRecordButton";
 import type { BookingRequestStatus } from "@/lib/types";
 
 interface BookingRequestDetailProps {
   record: Record<string, unknown>;
+  canDelete?: boolean;
 }
 
 const STATUS_OPTIONS: BookingRequestStatus[] = [
@@ -21,7 +23,10 @@ const STATUS_OPTIONS: BookingRequestStatus[] = [
   "cancelled",
 ];
 
-export function BookingRequestDetail({ record }: BookingRequestDetailProps) {
+export function BookingRequestDetail({
+  record,
+  canDelete = false,
+}: BookingRequestDetailProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -165,7 +170,7 @@ export function BookingRequestDetail({ record }: BookingRequestDetailProps) {
         </div>
 
         {!isConverted && (
-          <div className="mt-6">
+          <div className="mt-6 flex flex-wrap items-center gap-3">
             <button
               onClick={handleSave}
               disabled={isPending}
@@ -173,6 +178,34 @@ export function BookingRequestDetail({ record }: BookingRequestDetailProps) {
             >
               {isPending ? "Saving..." : "Save Changes"}
             </button>
+            {canDelete && (
+              <DeleteRecordButton
+                table="booking_requests"
+                id={id}
+                label={
+                  (record.full_name as string) ||
+                  (record.official_mail as string) ||
+                  undefined
+                }
+                redirectTo="/booking-requests"
+                variant="button"
+              />
+            )}
+          </div>
+        )}
+        {isConverted && canDelete && (
+          <div className="mt-6 border-t border-gray-100 pt-4">
+            <DeleteRecordButton
+              table="booking_requests"
+              id={id}
+              label={
+                (record.full_name as string) ||
+                (record.official_mail as string) ||
+                undefined
+              }
+              redirectTo="/booking-requests"
+              variant="button"
+            />
           </div>
         )}
       </div>

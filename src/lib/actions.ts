@@ -7,6 +7,9 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { mapBookingRequestToBooking } from "@/lib/utils";
 import { SEEN_TRACKED_TABLES, TABLE_TO_PATH } from "@/lib/new-records";
 import { HIGHLIGHT_TABLES } from "@/lib/latest-highlight";
+import { requirePermission, assertPermission } from "@/lib/auth/permissions";
+import { TABLE_MODULE_MAP } from "@/lib/auth/nav-config";
+import { DELETABLE_TABLES, getDeletePermissionForTable } from "@/lib/table-config";
 import type { BookingRequestStatus, BookingStatus, TableName } from "@/lib/types";
 
 const ORDER_COLUMNS = ["created_at", "updated_at", "id"];
@@ -23,6 +26,7 @@ export async function updateBookingRequest(
   id: string,
   updates: Record<string, unknown>
 ) {
+  await assertPermission("booking_requests:write");
   const supabase = createServerClient();
 
   const { error } = await supabase
@@ -41,6 +45,7 @@ export async function updateBookingRequest(
 
 export async function markRecordSeen(table: TableName, id: string) {
   if (!SEEN_TRACKED_TABLES.includes(table)) return;
+  await assertPermission(`${TABLE_MODULE_MAP[table]}:read`);
 
   const supabase = createServerClient();
   const { error } = await supabase
@@ -68,6 +73,7 @@ export async function getUnseenCount(table: TableName): Promise<number> {
 
 export async function markAllRecordsSeen(table: TableName) {
   if (!SEEN_TRACKED_TABLES.includes(table)) return { success: true, count: 0 };
+  await assertPermission(`${TABLE_MODULE_MAP[table]}:read`);
 
   const supabase = createServerClient();
   const unseen = await getUnseenCount(table);
@@ -109,6 +115,7 @@ export async function getLatestHighlightId(
 
 export async function dismissLatestHighlight(table: TableName, id: string) {
   if (!HIGHLIGHT_TABLES.includes(table)) return;
+  await assertPermission(`${TABLE_MODULE_MAP[table]}:read`);
 
   const latestId = await getLatestHighlightId(table);
   if (latestId !== id) return;
@@ -143,6 +150,7 @@ export interface ManualBookingInput {
 }
 
 export async function createManualBooking(input: ManualBookingInput) {
+  await assertPermission("bookings:create");
   const supabase = createServerClient();
 
   const payload: Record<string, unknown> = {
@@ -217,6 +225,7 @@ export async function convertBookingRequest(
     notes?: string;
   }
 ) {
+  await assertPermission("booking_requests:convert");
   const supabase = createServerClient();
 
   const { data: request, error: fetchError } = await supabase
@@ -262,6 +271,7 @@ export async function updateBooking(
   id: string,
   updates: Record<string, unknown>
 ) {
+  await assertPermission("bookings:write");
   const supabase = createServerClient();
   const payload = { ...updates, updated_at: new Date().toISOString() };
 
@@ -274,6 +284,29 @@ export async function updateBooking(
 
   revalidatePath("/bookings");
   revalidatePath("/");
+  return { success: true };
+}
+
+export async function deleteRecord(table: TableName, id: string) {
+  if (!DELETABLE_TABLES.includes(table)) {
+    throw new Error("Delete is not allowed for this table");
+  }
+
+  await assertPermission(getDeletePermissionForTable(table));
+
+  const supabase = createServerClient();
+  const { error } = await supabase.from(table).delete().eq("id", id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath(TABLE_TO_PATH[table]);
+  revalidatePath("/");
+  revalidatePath("/", "layout");
+
+  if (table === "booking_requests") {
+    revalidatePath(`/booking-requests/${id}`);
+  }
+
   return { success: true };
 }
 
@@ -301,6 +334,9 @@ export async function fetchTablePage(
     searchableColumns?: string[];
   }
 ): Promise<PaginatedResult> {
+  if (TABLE_MODULE_MAP[table as TableName]) {
+    await assertPermission(`${TABLE_MODULE_MAP[table as TableName]}:read`);
+  }
   const supabase = createServerClient();
   const search = options?.search?.trim();
   const sortDir = options?.sortDir ?? "desc";
@@ -377,6 +413,10 @@ export async function fetchTableData(
 }
 
 export async function fetchRecord(table: string, id: string) {
+  const tableName = table as TableName;
+  if (TABLE_MODULE_MAP[tableName]) {
+    await assertPermission(`${TABLE_MODULE_MAP[tableName]}:read`);
+  }
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from(table)

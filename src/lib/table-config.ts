@@ -1,4 +1,5 @@
 import type { TableName } from "./types";
+import { TABLE_MODULE_MAP } from "./auth/nav-config";
 
 export interface TableConfig {
   label: string;
@@ -295,3 +296,10 @@ export const LEGACY_TABLES: TableName[] = [
   "for_businesses",
   "users",
 ];
+
+/** All CRM data tables support row delete (permission-gated per module). */
+export const DELETABLE_TABLES: TableName[] = CRM_TABLES;
+
+export function getDeletePermissionForTable(table: TableName): string {
+  return `${TABLE_MODULE_MAP[table]}:delete`;
+}

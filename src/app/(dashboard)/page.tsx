@@ -20,6 +20,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const { hasPermission, requireModule } = await import("@/lib/auth/permissions");
+  const session = await requireModule("dashboard");
+  const canDeleteBookingRequests = hasPermission(session, "booking_requests:delete");
+
   let stats = {
     bookingRequests: 0,
     bookings: 0,
@@ -140,6 +144,7 @@ export default async function DashboardPage() {
             total={recentBookings.total}
             page={recentBookings.page}
             pageSize={recentBookings.pageSize}
+            canDelete={canDeleteBookingRequests}
           />
         </div>
       </div>

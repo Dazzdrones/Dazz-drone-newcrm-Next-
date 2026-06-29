@@ -1,47 +1,18 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import {
-  LayoutDashboard,
-  CalendarCheck,
-  CalendarDays,
-  Phone,
-  Mail,
-  Briefcase,
-  Building2,
-  Users,
-  Plane,
-  Handshake,
-  UserCircle,
-  type LucideIcon,
-} from "lucide-react";
-
-export interface NavItem {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-}
-
-export const NEW_DATA_NAV: NavItem[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Bookings", href: "/bookings", icon: CalendarCheck },
-  { label: "Booking Requests", href: "/booking-requests", icon: CalendarDays },
-  { label: "Callback Requests", href: "/callback-requests", icon: Phone },
-  { label: "Contact Requests", href: "/contact-requests", icon: Mail },
-  { label: "Career Applications", href: "/career-applications", icon: Briefcase },
-  { label: "Enterprise Requests", href: "/enterprise-requests", icon: Building2 },
-];
-
-export const LEGACY_DATA_NAV: NavItem[] = [
-  { label: "Pilot Requests", href: "/pilot-requests", icon: Plane },
-  { label: "Pilot Registrations", href: "/drone-pilot-registrations", icon: UserCircle },
-  { label: "For Businesses", href: "/for-businesses", icon: Handshake },
-  { label: "Users", href: "/users", icon: Users },
-];
-
-export const NAV_ITEMS: NavItem[] = [...NEW_DATA_NAV, ...LEGACY_DATA_NAV];
+  ADMIN_NAV,
+  filterNavByPermissions,
+  LEGACY_NAV,
+  MAIN_NAV,
+  type CrmNavItem,
+} from "@/lib/auth/nav-config";
+import { UserMenu } from "./UserMenu";
 
 function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -57,7 +28,7 @@ function NavLink({
   active,
   badgeCount = 0,
 }: {
-  item: NavItem;
+  item: CrmNavItem;
   active: boolean;
   badgeCount?: number;
 }) {
@@ -80,10 +51,35 @@ function NavLink({
 
 interface SidebarProps {
   badgeCounts?: Record<string, number>;
+  permissions: string[];
+  isSuperAdmin: boolean;
+  user: {
+    fullName: string | null;
+    email: string;
+    roleName: string;
+  };
 }
 
-export function Sidebar({ badgeCounts = {} }: SidebarProps) {
+export function Sidebar({
+  badgeCounts = {},
+  permissions,
+  isSuperAdmin,
+  user,
+}: SidebarProps) {
   const pathname = usePathname();
+
+  const mainNav = filterNavByPermissions(MAIN_NAV, permissions, isSuperAdmin);
+  const legacyNav = filterNavByPermissions(LEGACY_NAV, permissions, isSuperAdmin);
+  const adminNav = filterNavByPermissions(ADMIN_NAV, permissions, isSuperAdmin);
+
+  const legacyActive = legacyNav.some((item) =>
+    item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
+  );
+  const [legacyOpen, setLegacyOpen] = useState(legacyActive);
+
+  useEffect(() => {
+    if (legacyActive) setLegacyOpen(true);
+  }, [legacyActive]);
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -107,28 +103,69 @@ export function Sidebar({ badgeCounts = {} }: SidebarProps) {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="mb-6 space-y-1">
-          {NEW_DATA_NAV.map((item) => (
+          {mainNav.map((item) => (
             <li key={item.href}>
               <NavLink
                 item={item}
                 active={isActive(item.href)}
-                badgeCount={badgeCounts[item.href] ?? 0}
+                badgeCount={
+                  item.badgePath ? (badgeCounts[item.badgePath] ?? 0) : 0
+                }
               />
             </li>
           ))}
         </ul>
 
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-          Legacy Data
-        </p>
-        <ul className="space-y-1">
-          {LEGACY_DATA_NAV.map((item) => (
-            <li key={item.href}>
-              <NavLink item={item} active={isActive(item.href)} />
-            </li>
-          ))}
-        </ul>
+        {adminNav.length > 0 && (
+          <>
+            <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Administration
+            </p>
+            <ul className="mb-6 space-y-1">
+              {adminNav.map((item) => (
+                <li key={item.href}>
+                  <NavLink item={item} active={isActive(item.href)} />
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        {legacyNav.length > 0 && (
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={() => setLegacyOpen((open) => !open)}
+              className="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600"
+            >
+              <span className="flex-1">Legacy Data</span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                  legacyOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+            {legacyOpen && (
+              <ul className="space-y-1">
+                {legacyNav.map((item) => (
+                  <li key={item.href}>
+                    <NavLink item={item} active={isActive(item.href)} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </nav>
+
+      <UserMenu
+        fullName={user.fullName}
+        email={user.email}
+        roleName={user.roleName}
+      />
     </aside>
   );
 }
+
+// Backward compat for Header title lookup
+export const NAV_ITEMS = [...MAIN_NAV, ...LEGACY_NAV];

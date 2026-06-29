@@ -25,3 +25,9 @@ body {
   scrollbar-width: thin;
   scrollbar-color: #d1d5db transparent;
 }
+
+select {
+  appearance: auto;
+  background-color: #fff;
+  color: #111827;
+}

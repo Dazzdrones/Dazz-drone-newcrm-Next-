@@ -11,8 +11,10 @@ import {
 } from "@/lib/actions";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { parseTableQueryParams } from "@/lib/query-params";
-import { TABLE_CONFIG, LEGACY_TABLES } from "@/lib/table-config";
+import { TABLE_CONFIG, DELETABLE_TABLES, getDeletePermissionForTable, LEGACY_TABLES } from "@/lib/table-config";
 import { SEEN_TRACKED_TABLES } from "@/lib/new-records";
+import { TABLE_MODULE_MAP } from "@/lib/auth/nav-config";
+import { hasPermission, requireModule } from "@/lib/auth/permissions";
 import type { TableName } from "@/lib/types";
 
 interface TablePageProps {
@@ -30,6 +32,11 @@ export async function TablePage({
   const path = basePath ?? tableToPath(table);
   const { page, q, sort, dir } = parseTableQueryParams(searchParams);
   const isTracked = SEEN_TRACKED_TABLES.includes(table);
+
+  const session = await requireModule(TABLE_MODULE_MAP[table]);
+  const canDelete =
+    DELETABLE_TABLES.includes(table) &&
+    hasPermission(session, getDeletePermissionForTable(table));
 
   if (isTracked) {
     try {
@@ -101,6 +108,7 @@ export async function TablePage({
           sort={sort}
           sortDir={dir}
           maxColumns={table === "bookings" ? 14 : 8}
+          canDelete={canDelete}
         />
       </div>
     </>

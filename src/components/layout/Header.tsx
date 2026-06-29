@@ -1,8 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS } from "./Sidebar";
+import { MAIN_NAV, LEGACY_NAV } from "@/lib/auth/nav-config";
 import { RefreshButton } from "@/components/ui/RefreshButton";
+
+const NAV_ITEMS = [...MAIN_NAV, ...LEGACY_NAV];
 
 interface HeaderProps {
   title?: string;

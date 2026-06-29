@@ -11,6 +11,7 @@ import { dismissLatestHighlight } from "@/lib/actions";
 import { StatusBadge } from "./StatusBadge";
 import { Pagination } from "./Pagination";
 import { DataTableRow } from "./DataTableRow";
+import { DeleteRecordButton, getRecordLabel } from "./DeleteRecordButton";
 
 interface DataTableProps {
   data: Record<string, unknown>[];
@@ -28,6 +29,7 @@ interface DataTableProps {
   search?: string;
   sort?: string;
   sortDir?: "asc" | "desc";
+  canDelete?: boolean;
 }
 
 export function DataTable({
@@ -46,6 +48,7 @@ export function DataTable({
   search,
   sort,
   sortDir = "desc",
+  canDelete = false,
 }: DataTableProps) {
   const hasQuery = !!search;
   const recordTotal = total ?? 0;
@@ -97,6 +100,7 @@ export function DataTable({
 
   const displayColumns = columns.slice(0, maxColumns);
   const resolvedDetailHref = detailHref || config?.detailRoute;
+  const showActions = !!(resolvedDetailHref || (canDelete && table));
   const latestOnPage = latestHighlightId
     ? data.some((row) => row.id === latestHighlightId)
     : false;
@@ -184,7 +188,7 @@ export function DataTable({
                     </th>
                   );
                 })}
-                {resolvedDetailHref && (
+                {showActions && (
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Actions
                   </th>
@@ -229,15 +233,26 @@ export function DataTable({
                         )}
                       </td>
                     ))}
-                    {resolvedDetailHref && id && (
+                    {showActions && id && (
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          href={resolvedDetailHref(id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-sm font-medium text-[#34AADC] hover:underline"
-                        >
-                          View
-                        </Link>
+                        <div className="inline-flex items-center justify-end gap-2">
+                          {resolvedDetailHref && (
+                            <Link
+                              href={resolvedDetailHref(id)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-sm font-medium text-[#34AADC] hover:underline"
+                            >
+                              View
+                            </Link>
+                          )}
+                          {canDelete && table && (
+                            <DeleteRecordButton
+                              table={table}
+                              id={id}
+                              label={getRecordLabel(row)}
+                            />
+                          )}
+                        </div>
                       </td>
                     )}
                   </DataTableRow>
