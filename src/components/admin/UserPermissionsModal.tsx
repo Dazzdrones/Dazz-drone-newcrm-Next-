@@ -40,27 +40,35 @@ function buildInitialStates(
 }
 
 function isEffective(
-  key: string,
   state: PermissionOverrideState,
-  roleHas: boolean
+  roleHas: boolean,
+  teamHas: boolean
 ) {
   if (state === "grant") return true;
   if (state === "deny") return false;
-  return roleHas;
+  return roleHas || teamHas;
 }
 
 function nextState(
   current: PermissionOverrideState,
-  roleHas: boolean
+  roleHas: boolean,
+  teamHas: boolean
 ): PermissionOverrideState {
-  if (roleHas) {
+  const inherited = roleHas || teamHas;
+  if (inherited) {
     if (current === "inherit") return "deny";
-    if (current === "deny") return "inherit";
     return "inherit";
   }
   if (current === "inherit") return "grant";
   if (current === "grant") return "inherit";
   return "inherit";
+}
+
+function permissionSource(roleHas: boolean, teamHas: boolean) {
+  if (roleHas && teamHas) return "role and team";
+  if (teamHas) return "team";
+  if (roleHas) return "role";
+  return null;
 }
 
 export function UserPermissionsModal({
@@ -86,6 +94,11 @@ export function UserPermissionsModal({
 
   const rolePermSet = useMemo(
     () => new Set(details?.rolePermissions ?? []),
+    [details]
+  );
+
+  const teamPermSet = useMemo(
+    () => new Set(details?.teamPermissions ?? []),
     [details]
   );
 
@@ -119,7 +132,11 @@ export function UserPermissionsModal({
   }, [user.id, permissions]);
 
   const effectiveCount = permissions.filter((p) =>
-    isEffective(p.key, states[p.key] ?? "inherit", rolePermSet.has(p.key))
+    isEffective(
+      states[p.key] ?? "inherit",
+      rolePermSet.has(p.key),
+      teamPermSet.has(p.key)
+    )
   ).length;
 
   function handleSave() {
@@ -199,11 +216,23 @@ export function UserPermissionsModal({
               <div className="mb-4 rounded-lg border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
                 <p className="font-medium">How overrides work</p>
                 <p className="mt-1 text-sky-800/80">
-                  Permissions inherit from the user&apos;s role by default. Click a
-                  permission to <strong>grant</strong> extra access or{" "}
-                  <strong>deny</strong> something their role allows.
+                  Permissions come from the user&apos;s <strong>role</strong> and{" "}
+                  <strong>team</strong> memberships. Click any permission to{" "}
+                  <strong>deny</strong> it for this user only — including access
+                  granted by a team — or <strong>grant</strong> extra access.
                 </p>
               </div>
+
+              {(details?.teamPermissions.length ?? 0) > 0 && (
+                <div className="mb-4 rounded-lg border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+                  <p className="font-medium">Team access detected</p>
+                  <p className="mt-1 text-violet-800/80">
+                    This user receives {details!.teamPermissions.length} permission
+                    {details!.teamPermissions.length === 1 ? "" : "s"} from team
+                    module access. Deny them below to revoke for this user only.
+                  </p>
+                </div>
+              )}
 
               <div className="mb-4 flex items-center justify-between">
                 <p className="text-sm text-gray-600">
@@ -215,6 +244,10 @@ export function UserPermissionsModal({
                 <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                   <span className="inline-flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-gray-300" /> From role
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-violet-400" /> From
+                    team
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" /> Granted
@@ -247,27 +280,61 @@ export function UserPermissionsModal({
                           const displayName =
                             moduleNames[moduleKey] ?? meta.name;
 
+                          const moduleHasInherited = perms.some(
+                            (p) =>
+                              rolePermSet.has(p.key) || teamPermSet.has(p.key)
+                          );
+
                           return (
                             <div
                               key={moduleKey}
                               className="rounded-xl border border-gray-100 bg-gray-50/50 p-4"
                             >
-                              <div className="mb-3 flex items-center gap-2.5">
-                                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-[#34AADC] shadow-sm ring-1 ring-gray-100">
-                                  <Icon className="h-4 w-4" />
-                                </span>
-                                <p className="text-sm font-semibold text-gray-900">
-                                  {displayName}
-                                </p>
+                              <div className="mb-3 flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-[#34AADC] shadow-sm ring-1 ring-gray-100">
+                                    <Icon className="h-4 w-4" />
+                                  </span>
+                                  <p className="text-sm font-semibold text-gray-900">
+                                    {displayName}
+                                  </p>
+                                </div>
+                                {moduleHasInherited && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setStates((prev) => {
+                                        const next = { ...prev };
+                                        for (const perm of perms) {
+                                          if (
+                                            rolePermSet.has(perm.key) ||
+                                            teamPermSet.has(perm.key)
+                                          ) {
+                                            next[perm.key] = "deny";
+                                          }
+                                        }
+                                        return next;
+                                      })
+                                    }
+                                    className="shrink-0 text-[10px] font-medium text-red-600 hover:underline"
+                                  >
+                                    Revoke module
+                                  </button>
+                                )}
                               </div>
                               <div className="flex flex-wrap gap-2">
                                 {perms.map((perm) => {
                                   const roleHas = rolePermSet.has(perm.key);
+                                  const teamHas = teamPermSet.has(perm.key);
                                   const state = states[perm.key] ?? "inherit";
                                   const active = isEffective(
-                                    perm.key,
                                     state,
-                                    roleHas
+                                    roleHas,
+                                    teamHas
+                                  );
+                                  const source = permissionSource(
+                                    roleHas,
+                                    teamHas
                                   );
                                   const actionMeta = ACTION_META[perm.action] ?? {
                                     label: perm.action,
@@ -285,6 +352,9 @@ export function UserPermissionsModal({
                                   } else if (state === "deny") {
                                     pillClass =
                                       "border-red-300 bg-red-100 text-red-800 ring-1 ring-red-200 line-through";
+                                  } else if (active && teamHas && !roleHas) {
+                                    pillClass =
+                                      "border-violet-300 bg-violet-100 text-violet-800";
                                   } else if (active) {
                                     pillClass =
                                       "border-slate-300 bg-slate-100 text-slate-700";
@@ -296,9 +366,9 @@ export function UserPermissionsModal({
                                       type="button"
                                       title={
                                         state === "inherit"
-                                          ? roleHas
-                                            ? "From role — click to deny"
-                                            : "Not from role — click to grant"
+                                          ? source
+                                            ? `From ${source} — click to deny`
+                                            : "Not assigned — click to grant"
                                           : state === "grant"
                                             ? "Granted — click to reset"
                                             : "Denied — click to reset"
@@ -308,7 +378,8 @@ export function UserPermissionsModal({
                                           ...prev,
                                           [perm.key]: nextState(
                                             prev[perm.key] ?? "inherit",
-                                            roleHas
+                                            roleHas,
+                                            teamHas
                                           ),
                                         }))
                                       }
