@@ -22,7 +22,7 @@ export function DashboardLiveUpdates() {
     for (const table of SEEN_TRACKED_TABLES) {
       channel.on(
         "postgres_changes",
-        { event: "*", schema: "public", table },
+        { event: "INSERT", schema: "public", table },
         scheduleRefresh
       );
     }

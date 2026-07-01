@@ -1,14 +1,11 @@
+import { Suspense } from "react";
 import { Header } from "@/components/layout/Header";
-import { DataTable } from "@/components/ui/DataTable";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { MarkAllReadButton } from "@/components/ui/MarkAllReadButton";
+import { MarkSeenOnVisit } from "@/components/ui/MarkSeenOnVisit";
 import { AddManualBookingButton } from "@/components/booking/AddManualBookingButton";
-import {
-  fetchTablePage,
-  getLatestHighlightId,
-  markAllRecordsSeen,
-} from "@/lib/actions";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { TablePageContent } from "@/components/TablePageContent";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { parseTableQueryParams } from "@/lib/query-params";
 import { TABLE_CONFIG, DELETABLE_TABLES, getDeletePermissionForTable, LEGACY_TABLES } from "@/lib/table-config";
 import { SEEN_TRACKED_TABLES } from "@/lib/new-records";
@@ -40,29 +37,9 @@ export async function TablePage({
   const canCreateBookings = table === "bookings" && modulePerms.create;
   const canWriteBookings = table === "bookings" && modulePerms.write;
 
-  const [markResult, result, latestHighlightId] = await Promise.all([
-    isTracked
-      ? markAllRecordsSeen(table).catch(() => ({ success: false, count: 0 }))
-      : Promise.resolve({ success: true, count: 0 }),
-    fetchTablePage(table, page, DEFAULT_PAGE_SIZE, {
-      search: q,
-      sort,
-      sortDir: dir,
-      searchableColumns: config.searchableColumns,
-    }).catch(() => ({
-      data: [] as Record<string, unknown>[],
-      total: 0,
-      page: page ?? 1,
-      pageSize: DEFAULT_PAGE_SIZE,
-      totalPages: 1,
-    })),
-    getLatestHighlightId(table).catch(() => null),
-  ]);
-
-  const unseenCount = isTracked && markResult.success ? 0 : 0;
-
   return (
     <>
+      {isTracked && <MarkSeenOnVisit table={table} />}
       <Header
         title={config.label}
         subtitle={config.description}
@@ -74,26 +51,23 @@ export async function TablePage({
             <TableToolbar basePath={path} q={q} sort={sort} dir={dir} />
           </div>
           {canCreateBookings && <AddManualBookingButton />}
-          {isTracked && (
-            <MarkAllReadButton table={table} unseenCount={unseenCount} />
-          )}
+          {isTracked && <MarkAllReadButton table={table} unseenCount={0} />}
         </div>
-        <DataTable
-          data={result.data}
-          table={table}
-          latestHighlightId={latestHighlightId}
-          total={result.total}
-          page={result.page}
-          pageSize={result.pageSize}
-          totalPages={result.totalPages}
-          basePath={path}
-          search={q}
-          sort={sort}
-          sortDir={dir}
-          maxColumns={table === "bookings" ? 14 : 8}
-          canDelete={canDelete}
-          canWrite={canWriteBookings}
-        />
+        <Suspense
+          key={`${table}-${page}-${q}-${sort}-${dir}`}
+          fallback={<TableSkeleton />}
+        >
+          <TablePageContent
+            table={table}
+            page={page ?? 1}
+            q={q ?? ""}
+            sort={sort ?? ""}
+            dir={dir ?? "desc"}
+            basePath={path}
+            canDelete={canDelete}
+            canWrite={canWriteBookings}
+          />
+        </Suspense>
       </div>
     </>
   );
