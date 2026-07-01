@@ -14,10 +14,10 @@ import {
   getCachedDashboardStats,
   getCachedNavBadgeCounts,
 } from "@/lib/cached-queries";
-import { requirePermission, assertPermission, hasPermission } from "@/lib/auth/permissions";
+import { requirePermission, assertPermission, hasPermission, canAccessModule } from "@/lib/auth/permissions";
 import type { AuthSession } from "@/lib/auth/types";
 import { TABLE_MODULE_MAP } from "@/lib/auth/nav-config";
-import { DELETABLE_TABLES, getDeletePermissionForTable } from "@/lib/table-config";
+import { DELETABLE_TABLES, getDeletePermissionForTable, CRM_TABLES } from "@/lib/table-config";
 import type { BookingRequestStatus, BookingStatus, TableName } from "@/lib/types";
 
 const ORDER_COLUMNS = ["created_at", "updated_at", "id"];
@@ -551,4 +551,38 @@ export async function fetchRecord(table: string, id: string) {
 
 export async function getDashboardStats() {
   return getCachedDashboardStats();
+}
+
+/** Counts only tables the user can access — faster for limited roles (e.g. Employee). */
+export async function getDashboardStatsForSession(session: AuthSession) {
+  if (session.isSuperAdmin) {
+    return getCachedDashboardStats();
+  }
+
+  const tables = CRM_TABLES.filter((table) =>
+    canAccessModule(session, TABLE_MODULE_MAP[table])
+  );
+
+  const results = await Promise.all(
+    tables.map(async (table) => ({
+      table,
+      count: await getTableCount(table),
+    }))
+  );
+
+  const byTable = Object.fromEntries(results.map((r) => [r.table, r.count]));
+
+  return {
+    bookingRequests: byTable.booking_requests ?? 0,
+    bookings: byTable.bookings ?? 0,
+    callbackRequests: byTable.callback_requests ?? 0,
+    contactRequests: byTable.contact_requests ?? 0,
+    careerApplications: byTable.career_applications ?? 0,
+    enterpriseRequests: byTable.enterprise_requests ?? 0,
+    pilotRequests: byTable.pilot_requests ?? 0,
+    dronePilotRegistrations: byTable.drone_pilot_registrations ?? 0,
+    forBusinesses: byTable.for_businesses ?? 0,
+    users: byTable.users ?? 0,
+    bookingsTableMissing: byTable.bookings === null,
+  };
 }
