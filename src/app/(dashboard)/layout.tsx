@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { DashboardLiveUpdates } from "@/components/layout/DashboardLiveUpdates";
+import { NavigationProgress } from "@/components/layout/NavigationProgress";
 import { getCachedNavBadgeCounts } from "@/lib/cached-queries";
 import { getAuthSession } from "@/lib/auth/session";
 import { createSessionClient } from "@/lib/supabase/session";
@@ -23,6 +25,9 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Suspense fallback={null}>
+        <NavigationProgress />
+      </Suspense>
       <DashboardLiveUpdates />
       <Sidebar
         badgeCounts={badgeCounts}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { StatCard } from "@/components/ui/StatCard";
 import { DataTable } from "@/components/ui/DataTable";
+import { Shimmer } from "@/components/ui/Shimmer";
 import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { fetchTablePage, getDashboardStatsForSession } from "@/lib/actions";
 import { hasPermission, requireModule } from "@/lib/auth/permissions";
@@ -187,9 +188,9 @@ async function DashboardRecentRequests() {
 
 function StatsSkeleton() {
   return (
-    <div className="grid animate-pulse gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="h-24 rounded-xl bg-gray-100" />
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <Shimmer key={i} className="h-24 rounded-xl" />
       ))}
     </div>
   );
@@ -199,10 +200,10 @@ function RecentRequestsSkeleton() {
   return (
     <div className="mt-8">
       <div className="mb-4 flex justify-between">
-        <div className="h-6 w-48 animate-pulse rounded bg-gray-200" />
-        <div className="h-4 w-24 animate-pulse rounded bg-gray-100" />
+        <Shimmer className="h-6 w-52" />
+        <Shimmer className="h-4 w-28" />
       </div>
-      <TableSkeleton />
+      <TableSkeleton rows={6} />
     </div>
   );
 }
