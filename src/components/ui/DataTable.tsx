@@ -12,6 +12,7 @@ import { StatusBadge } from "./StatusBadge";
 import { Pagination } from "./Pagination";
 import { DataTableRow } from "./DataTableRow";
 import { DeleteRecordButton, getRecordLabel } from "./DeleteRecordButton";
+import { BookingStatusSelect } from "@/components/booking/BookingStatusSelect";
 
 interface DataTableProps {
   data: Record<string, unknown>[];
@@ -30,6 +31,7 @@ interface DataTableProps {
   sort?: string;
   sortDir?: "asc" | "desc";
   canDelete?: boolean;
+  canWrite?: boolean;
 }
 
 export function DataTable({
@@ -49,6 +51,7 @@ export function DataTable({
   sort,
   sortDir = "desc",
   canDelete = false,
+  canWrite = false,
 }: DataTableProps) {
   const hasQuery = !!search;
   const recordTotal = total ?? 0;
@@ -218,7 +221,13 @@ export function DataTable({
                     {displayColumns.map((col, colIdx) => (
                       <td
                         key={col}
-                        className="max-w-[240px] truncate px-4 py-3 text-gray-700"
+                        className={`max-w-[240px] px-4 py-3 text-gray-700 ${
+                          col === resolvedStatusColumn &&
+                          table === "bookings" &&
+                          canWrite
+                            ? "overflow-visible"
+                            : "truncate"
+                        }`}
                         title={getDisplayValue(row[col])}
                       >
                         {colIdx === 0 && isHighlighted && (
@@ -226,8 +235,17 @@ export function DataTable({
                             LATEST
                           </span>
                         )}
-                        {col === resolvedStatusColumn && row[col] ? (
-                          <StatusBadge status={String(row[col])} />
+                        {col === resolvedStatusColumn ? (
+                          table === "bookings" && canWrite && id ? (
+                            <BookingStatusSelect
+                              bookingId={id}
+                              status={String(row[col] || "confirmed")}
+                            />
+                          ) : row[col] ? (
+                            <StatusBadge status={String(row[col])} />
+                          ) : (
+                            "—"
+                          )
                         ) : (
                           getDisplayValue(row[col])
                         )}

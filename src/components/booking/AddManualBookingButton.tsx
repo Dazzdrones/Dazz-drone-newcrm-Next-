@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { createManualBooking } from "@/lib/actions";
 import type { BookingStatus } from "@/lib/types";
+import { BookingDateTimeInput } from "@/components/booking/BookingDateTimeInput";
 
 const STATUS_OPTIONS: BookingStatus[] = [
   "confirmed",
@@ -188,12 +189,10 @@ export function AddManualBookingButton() {
                     className={inputClass}
                   />
                 </Field>
-                <Field label="Booking date/time">
-                  <input
+                <Field label="Booking date & time" className="sm:col-span-2">
+                  <BookingDateTimeInput
                     value={form.booking_datetime}
-                    onChange={(e) => updateField("booking_datetime", e.target.value)}
-                    className={inputClass}
-                    placeholder="YYYY-MM-DD or free text"
+                    onChange={(v) => updateField("booking_datetime", v)}
                   />
                 </Field>
                 <Field label="Duration">
@@ -275,13 +274,15 @@ function Field({
   label,
   children,
   required,
+  className,
 }: {
   label: string;
   children: React.ReactNode;
   required?: boolean;
+  className?: string;
 }) {
   return (
-    <label className="block">
+    <label className={`block ${className ?? ""}`}>
       <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
         {label}
         {required && <span className="text-red-500"> *</span>}

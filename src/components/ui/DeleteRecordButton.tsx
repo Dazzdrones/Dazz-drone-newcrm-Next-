@@ -31,9 +31,14 @@ export function DeleteRecordButton({
     e.preventDefault();
     e.stopPropagation();
 
-    const message = label
-      ? `Delete "${label}"? This cannot be undone.`
-      : "Delete this record? This cannot be undone.";
+    const message =
+      table === "booking_requests"
+        ? label
+          ? `Delete booking request "${label}"? If it was converted, the linked booking will also be removed. This cannot be undone.`
+          : "Delete this booking request? If it was converted, the linked booking will also be removed. This cannot be undone."
+        : label
+          ? `Delete "${label}"? This cannot be undone.`
+          : "Delete this record? This cannot be undone.";
 
     if (!confirm(message)) return;
 
@@ -47,7 +52,12 @@ export function DeleteRecordButton({
           router.refresh();
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete");
+        const message =
+          err instanceof Error ? err.message : "Failed to delete";
+        setError(message);
+        if (variant === "icon") {
+          alert(message);
+        }
       }
     });
   }

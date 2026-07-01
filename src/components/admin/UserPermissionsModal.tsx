@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Check, Crown, RotateCcw, Save, Shield, X } from "lucide-react";
+import { Crown, RotateCcw, Save, X } from "lucide-react";
 import {
   getUserPermissionDetails,
   saveUserPermissionOverrides,
@@ -10,13 +10,10 @@ import {
   type UserPermissionDetails,
 } from "@/lib/auth/user-permissions-actions";
 import {
-  ACTION_META,
-  getModuleMeta,
   groupPermissionsByModule,
-  MODULE_GROUPS,
-  sortModuleKeys,
   type PermissionMeta,
 } from "@/lib/auth/permission-ui";
+import { UserPermissionMatrix } from "@/components/admin/PermissionMatrix";
 import type { CrmUserRow } from "@/lib/auth/admin-actions";
 
 interface UserPermissionsModalProps {
@@ -47,28 +44,6 @@ function isEffective(
   if (state === "grant") return true;
   if (state === "deny") return false;
   return roleHas || teamHas;
-}
-
-function nextState(
-  current: PermissionOverrideState,
-  roleHas: boolean,
-  teamHas: boolean
-): PermissionOverrideState {
-  const inherited = roleHas || teamHas;
-  if (inherited) {
-    if (current === "inherit") return "deny";
-    return "inherit";
-  }
-  if (current === "inherit") return "grant";
-  if (current === "grant") return "inherit";
-  return "inherit";
-}
-
-function permissionSource(roleHas: boolean, teamHas: boolean) {
-  if (roleHas && teamHas) return "role and team";
-  if (teamHas) return "team";
-  if (roleHas) return "role";
-  return null;
 }
 
 export function UserPermissionsModal({
@@ -241,172 +216,29 @@ export function UserPermissionsModal({
                   </span>{" "}
                   of {permissions.length} permissions effective
                 </p>
-                <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-gray-300" /> From role
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-violet-400" /> From
-                    team
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" /> Granted
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-red-500" /> Denied
-                  </span>
-                </div>
               </div>
 
-              <div className="space-y-6">
-                {MODULE_GROUPS.map((group) => {
-                  const moduleKeys = sortModuleKeys(
-                    [...permissionsByModule.keys()].filter(
-                      (key) => getModuleMeta(key).group === group.key
-                    )
-                  );
-                  if (moduleKeys.length === 0) return null;
-
-                  return (
-                    <div key={group.key}>
-                      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                        {group.label}
-                      </h3>
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        {moduleKeys.map((moduleKey) => {
-                          const perms = permissionsByModule.get(moduleKey) ?? [];
-                          const meta = getModuleMeta(moduleKey);
-                          const Icon = meta.icon;
-                          const displayName =
-                            moduleNames[moduleKey] ?? meta.name;
-
-                          const moduleHasInherited = perms.some(
-                            (p) =>
-                              rolePermSet.has(p.key) || teamPermSet.has(p.key)
-                          );
-
-                          return (
-                            <div
-                              key={moduleKey}
-                              className="rounded-xl border border-gray-100 bg-gray-50/50 p-4"
-                            >
-                              <div className="mb-3 flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2.5">
-                                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-[#34AADC] shadow-sm ring-1 ring-gray-100">
-                                    <Icon className="h-4 w-4" />
-                                  </span>
-                                  <p className="text-sm font-semibold text-gray-900">
-                                    {displayName}
-                                  </p>
-                                </div>
-                                {moduleHasInherited && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setStates((prev) => {
-                                        const next = { ...prev };
-                                        for (const perm of perms) {
-                                          if (
-                                            rolePermSet.has(perm.key) ||
-                                            teamPermSet.has(perm.key)
-                                          ) {
-                                            next[perm.key] = "deny";
-                                          }
-                                        }
-                                        return next;
-                                      })
-                                    }
-                                    className="shrink-0 text-[10px] font-medium text-red-600 hover:underline"
-                                  >
-                                    Revoke module
-                                  </button>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {perms.map((perm) => {
-                                  const roleHas = rolePermSet.has(perm.key);
-                                  const teamHas = teamPermSet.has(perm.key);
-                                  const state = states[perm.key] ?? "inherit";
-                                  const active = isEffective(
-                                    state,
-                                    roleHas,
-                                    teamHas
-                                  );
-                                  const source = permissionSource(
-                                    roleHas,
-                                    teamHas
-                                  );
-                                  const actionMeta = ACTION_META[perm.action] ?? {
-                                    label: perm.action,
-                                    icon: Shield,
-                                    color: "",
-                                    activeColor: "",
-                                  };
-                                  const ActionIcon = actionMeta.icon;
-
-                                  let pillClass =
-                                    "border-slate-200 bg-white text-slate-500 hover:border-slate-300";
-                                  if (state === "grant") {
-                                    pillClass =
-                                      "border-emerald-300 bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
-                                  } else if (state === "deny") {
-                                    pillClass =
-                                      "border-red-300 bg-red-100 text-red-800 ring-1 ring-red-200 line-through";
-                                  } else if (active && teamHas && !roleHas) {
-                                    pillClass =
-                                      "border-violet-300 bg-violet-100 text-violet-800";
-                                  } else if (active) {
-                                    pillClass =
-                                      "border-slate-300 bg-slate-100 text-slate-700";
-                                  }
-
-                                  return (
-                                    <button
-                                      key={perm.key}
-                                      type="button"
-                                      title={
-                                        state === "inherit"
-                                          ? source
-                                            ? `From ${source} — click to deny`
-                                            : "Not assigned — click to grant"
-                                          : state === "grant"
-                                            ? "Granted — click to reset"
-                                            : "Denied — click to reset"
-                                      }
-                                      onClick={() =>
-                                        setStates((prev) => ({
-                                          ...prev,
-                                          [perm.key]: nextState(
-                                            prev[perm.key] ?? "inherit",
-                                            roleHas,
-                                            teamHas
-                                          ),
-                                        }))
-                                      }
-                                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all ${pillClass}`}
-                                    >
-                                      {state === "grant" && (
-                                        <Check className="h-3 w-3" />
-                                      )}
-                                      {state === "deny" && (
-                                        <Ban className="h-3 w-3" />
-                                      )}
-                                      {state === "inherit" && active && (
-                                        <ActionIcon className="h-3 w-3 opacity-60" />
-                                      )}
-                                      {actionMeta.label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <UserPermissionMatrix
+                permissionsByModule={permissionsByModule}
+                moduleNames={moduleNames}
+                states={states}
+                rolePermSet={rolePermSet}
+                teamPermSet={teamPermSet}
+                onSetState={(key, state) =>
+                  setStates((prev) => ({ ...prev, [key]: state }))
+                }
+                onRevokeModule={(_moduleKey, permKeys) =>
+                  setStates((prev) => {
+                    const next = { ...prev };
+                    for (const key of permKeys) {
+                      if (rolePermSet.has(key) || teamPermSet.has(key)) {
+                        next[key] = "deny";
+                      }
+                    }
+                    return next;
+                  })
+                }
+              />
             </>
           )}
         </div>

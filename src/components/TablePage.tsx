@@ -14,7 +14,7 @@ import { parseTableQueryParams } from "@/lib/query-params";
 import { TABLE_CONFIG, DELETABLE_TABLES, getDeletePermissionForTable, LEGACY_TABLES } from "@/lib/table-config";
 import { SEEN_TRACKED_TABLES } from "@/lib/new-records";
 import { TABLE_MODULE_MAP } from "@/lib/auth/nav-config";
-import { hasPermission, requireModule } from "@/lib/auth/permissions";
+import { getModulePermissions, hasPermission, requireModule } from "@/lib/auth/permissions";
 import type { TableName } from "@/lib/types";
 
 interface TablePageProps {
@@ -34,9 +34,12 @@ export async function TablePage({
   const isTracked = SEEN_TRACKED_TABLES.includes(table);
 
   const session = await requireModule(TABLE_MODULE_MAP[table]);
+  const modulePerms = getModulePermissions(session, TABLE_MODULE_MAP[table]);
   const canDelete =
     DELETABLE_TABLES.includes(table) &&
     hasPermission(session, getDeletePermissionForTable(table));
+  const canCreateBookings = table === "bookings" && modulePerms.create;
+  const canWriteBookings = table === "bookings" && modulePerms.write;
 
   if (isTracked) {
     try {
@@ -90,7 +93,7 @@ export async function TablePage({
           <div className="min-w-0 flex-1">
             <TableToolbar basePath={path} q={q} sort={sort} dir={dir} />
           </div>
-          {table === "bookings" && <AddManualBookingButton />}
+          {canCreateBookings && <AddManualBookingButton />}
           {isTracked && (
             <MarkAllReadButton table={table} unseenCount={unseenCount} />
           )}
@@ -109,6 +112,7 @@ export async function TablePage({
           sortDir={dir}
           maxColumns={table === "bookings" ? 14 : 8}
           canDelete={canDelete}
+          canWrite={canWriteBookings}
         />
       </div>
     </>

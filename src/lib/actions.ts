@@ -7,7 +7,8 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { mapBookingRequestToBooking } from "@/lib/utils";
 import { SEEN_TRACKED_TABLES, TABLE_TO_PATH } from "@/lib/new-records";
 import { HIGHLIGHT_TABLES } from "@/lib/latest-highlight";
-import { requirePermission, assertPermission } from "@/lib/auth/permissions";
+import { requirePermission, assertPermission, hasPermission } from "@/lib/auth/permissions";
+import type { AuthSession } from "@/lib/auth/types";
 import { TABLE_MODULE_MAP } from "@/lib/auth/nav-config";
 import { DELETABLE_TABLES, getDeletePermissionForTable } from "@/lib/table-config";
 import type { BookingRequestStatus, BookingStatus, TableName } from "@/lib/types";
@@ -26,7 +27,16 @@ export async function updateBookingRequest(
   id: string,
   updates: Record<string, unknown>
 ) {
-  await assertPermission("booking_requests:write");
+  const hasStatus = "status" in updates;
+  const hasOtherFields = Object.keys(updates).some((key) => key !== "status");
+
+  if (hasStatus) {
+    await assertPermission("booking_requests:convert");
+  }
+  if (hasOtherFields) {
+    await assertPermission("booking_requests:write");
+  }
+
   const supabase = createServerClient();
 
   const { error } = await supabase
@@ -176,7 +186,6 @@ export async function createManualBooking(input: ManualBookingInput) {
     price: input.price ?? null,
     currency: "EUR",
     confirmed_date: new Date().toISOString(),
-    latest_row_acknowledged: false,
   };
 
   const { error } = await supabase.from("bookings").insert(payload);
@@ -287,17 +296,37 @@ export async function updateBooking(
   return { success: true };
 }
 
+const BOOKING_STATUSES: BookingStatus[] = [
+  "confirmed",
+  "in_progress",
+  "completed",
+  "cancelled",
+];
+
+export async function updateBookingStatus(id: string, status: BookingStatus) {
+  if (!BOOKING_STATUSES.includes(status)) {
+    throw new Error("Invalid booking status");
+  }
+  return updateBooking(id, { status });
+}
+
 export async function deleteRecord(table: TableName, id: string) {
   if (!DELETABLE_TABLES.includes(table)) {
     throw new Error("Delete is not allowed for this table");
   }
 
-  await assertPermission(getDeletePermissionForTable(table));
-
+  const session = await assertPermission(getDeletePermissionForTable(table));
   const supabase = createServerClient();
+
+  if (table === "booking_requests") {
+    await removeBookingRequestDependencies(supabase, id, session);
+  }
+
   const { error } = await supabase.from(table).delete().eq("id", id);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    throw new Error(formatDeleteError(error.message));
+  }
 
   revalidatePath(TABLE_TO_PATH[table]);
   revalidatePath("/");
@@ -305,9 +334,55 @@ export async function deleteRecord(table: TableName, id: string) {
 
   if (table === "booking_requests") {
     revalidatePath(`/booking-requests/${id}`);
+    revalidatePath("/bookings");
   }
 
   return { success: true };
+}
+
+async function removeBookingRequestDependencies(
+  supabase: ReturnType<typeof createServerClient>,
+  requestId: string,
+  session: AuthSession
+) {
+  const { data: linkedBookings, error: lookupError } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("booking_request_id", requestId);
+
+  if (lookupError) throw new Error(lookupError.message);
+  if (!linkedBookings?.length) return;
+
+  const bookingIds = linkedBookings.map((b) => b.id as string);
+
+  if (hasPermission(session, "bookings:delete")) {
+    const { error } = await supabase
+      .from("bookings")
+      .delete()
+      .in("id", bookingIds);
+    if (error) throw new Error(formatDeleteError(error.message));
+    return;
+  }
+
+  if (hasPermission(session, "bookings:write")) {
+    const { error } = await supabase
+      .from("bookings")
+      .update({ booking_request_id: null })
+      .eq("booking_request_id", requestId);
+    if (error) throw new Error(formatDeleteError(error.message));
+    return;
+  }
+
+  throw new Error(
+    "This request was converted to a booking. Delete the linked booking first, or ask an admin for booking edit/delete access."
+  );
+}
+
+function formatDeleteError(message: string): string {
+  if (message.includes("foreign key constraint")) {
+    return "This record is linked to other data and cannot be deleted yet.";
+  }
+  return message;
 }
 
 export async function getTableCount(table: string): Promise<number | null> {

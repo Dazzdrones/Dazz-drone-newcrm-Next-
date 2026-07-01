@@ -66,9 +66,6 @@ export async function fetchTeamPermissionsForUser(
       if (access.can_write) {
         perms.add(`${access.module_key}:write`);
         if (access.module_key === "bookings") perms.add("bookings:create");
-        if (access.module_key === "booking_requests") {
-          perms.add("booking_requests:convert");
-        }
       }
     }
   }

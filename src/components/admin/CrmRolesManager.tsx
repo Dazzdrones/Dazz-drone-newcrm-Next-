@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Check,
   Crown,
   Plus,
   RotateCcw,
@@ -19,13 +18,10 @@ import {
   type CrmRoleDetail,
 } from "@/lib/auth/rbac-actions";
 import {
-  ACTION_META,
-  getModuleMeta,
   groupPermissionsByModule,
-  MODULE_GROUPS,
-  sortModuleKeys,
   type PermissionMeta,
 } from "@/lib/auth/permission-ui";
+import { RolePermissionMatrix } from "@/components/admin/PermissionMatrix";
 
 interface CrmRolesManagerProps {
   roles: CrmRoleDetail[];
@@ -438,11 +434,8 @@ function PermissionEditor({
   const enabled = draft.size;
   const pct = total ? Math.round((enabled / total) * 100) : 0;
 
-  const moduleKeys = sortModuleKeys([...permissionsByModule.keys()]);
-
   return (
     <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-      {/* Header */}
       <div className="border-b border-gray-100 px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -477,97 +470,14 @@ function PermissionEditor({
         </div>
       </div>
 
-      {/* Module groups */}
-      <div className="space-y-6 px-6 py-6">
-        {MODULE_GROUPS.map((group) => {
-          const groupModules = moduleKeys.filter(
-            (key) => getModuleMeta(key).group === group.key
-          );
-          if (groupModules.length === 0) return null;
-
-          return (
-            <div key={group.key}>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                {group.label}
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {groupModules.map((moduleKey) => {
-                  const perms = permissionsByModule.get(moduleKey) ?? [];
-                  const meta = getModuleMeta(moduleKey);
-                  const Icon = meta.icon;
-                  const displayName = moduleNames[moduleKey] ?? meta.name;
-                  const enabledCount = perms.filter((p) =>
-                    draft.has(p.key)
-                  ).length;
-                  const allEnabled =
-                    perms.length > 0 && enabledCount === perms.length;
-                  const someEnabled =
-                    enabledCount > 0 && enabledCount < perms.length;
-
-                  return (
-                    <div
-                      key={moduleKey}
-                      className="rounded-xl border border-gray-100 bg-gray-50/50 p-4"
-                    >
-                      <div className="mb-3 flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-[#34AADC] shadow-sm ring-1 ring-gray-100">
-                            <Icon className="h-4 w-4" />
-                          </span>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {displayName}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {enabledCount}/{perms.length} enabled
-                            </p>
-                          </div>
-                        </div>
-                        <ModuleToggle
-                          checked={allEnabled}
-                          indeterminate={someEnabled}
-                          onChange={(checked) =>
-                            onToggleModule(moduleKey, checked)
-                          }
-                        />
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {perms.map((perm) => {
-                          const active = draft.has(perm.key);
-                          const actionMeta = ACTION_META[perm.action] ?? {
-                            label: perm.action,
-                            icon: Shield,
-                            color:
-                              "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
-                            activeColor:
-                              "border-[#34AADC] bg-[#34AADC]/10 text-[#2B94C5] ring-1 ring-[#34AADC]/20",
-                          };
-                          const ActionIcon = actionMeta.icon;
-
-                          return (
-                            <button
-                              key={perm.key}
-                              type="button"
-                              title={perm.description ?? perm.key}
-                              onClick={() => onToggle(perm.key)}
-                              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all ${
-                                active ? actionMeta.activeColor : actionMeta.color
-                              }`}
-                            >
-                              {active && <Check className="h-3 w-3 shrink-0" />}
-                              <ActionIcon className="h-3 w-3 shrink-0 opacity-70" />
-                              {actionMeta.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+      <div className="px-6 py-6">
+        <RolePermissionMatrix
+          permissionsByModule={permissionsByModule}
+          moduleNames={moduleNames}
+          enabled={draft}
+          onToggle={onToggle}
+          onToggleModule={onToggleModule}
+        />
       </div>
 
       {/* Footer actions */}
@@ -605,34 +515,6 @@ function PermissionEditor({
         )}
       </div>
     </div>
-  );
-}
-
-function ModuleToggle({
-  checked,
-  indeterminate,
-  onChange,
-}: {
-  checked: boolean;
-  indeterminate?: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-        checked || indeterminate ? "bg-[#34AADC]" : "bg-gray-200"
-      }`}
-    >
-      <span
-        className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-5" : indeterminate ? "translate-x-2.5" : ""
-        }`}
-      />
-    </button>
   );
 }
 

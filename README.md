@@ -53,6 +53,10 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Documentation
+
+- **[RBAC — Roles, Teams & Permissions](docs/RBAC.md)** — How access control works: roles, teams, user overrides, permission merging, and enforcement.
+
 ## Booking Workflow
 
 1. New requests appear in **Booking Requests**
