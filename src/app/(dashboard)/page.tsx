@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { StatCard } from "@/components/ui/StatCard";
 import { DataTable } from "@/components/ui/DataTable";
 import { getDashboardStats, fetchTablePage } from "@/lib/actions";
+import { hasPermission, requireModule } from "@/lib/auth/permissions";
 import { DASHBOARD_PREVIEW_SIZE } from "@/lib/constants";
 import {
   CalendarDays,
@@ -20,7 +21,6 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const { hasPermission, requireModule } = await import("@/lib/auth/permissions");
   const session = await requireModule("dashboard");
   const canDeleteBookingRequests = hasPermission(session, "booking_requests:delete");
 

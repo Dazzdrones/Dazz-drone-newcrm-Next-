@@ -1,12 +1,19 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
-import { CRM_TABLES } from "@/lib/table-config";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { mapBookingRequestToBooking } from "@/lib/utils";
 import { SEEN_TRACKED_TABLES, TABLE_TO_PATH } from "@/lib/new-records";
 import { HIGHLIGHT_TABLES } from "@/lib/latest-highlight";
+import {
+  DASHBOARD_STATS_TAG,
+  NAV_BADGE_COUNTS_TAG,
+} from "@/lib/cache-tags";
+import {
+  getCachedDashboardStats,
+  getCachedNavBadgeCounts,
+} from "@/lib/cached-queries";
 import { requirePermission, assertPermission, hasPermission } from "@/lib/auth/permissions";
 import type { AuthSession } from "@/lib/auth/types";
 import { TABLE_MODULE_MAP } from "@/lib/auth/nav-config";
@@ -50,6 +57,7 @@ export async function updateBookingRequest(
   revalidatePath(`/booking-requests/${id}`);
   revalidatePath("/");
   revalidatePath("/", "layout");
+  revalidateDashboardCaches();
   return { success: true };
 }
 
@@ -86,23 +94,29 @@ export async function markAllRecordsSeen(table: TableName) {
   await assertPermission(`${TABLE_MODULE_MAP[table]}:read`);
 
   const supabase = createServerClient();
-  const unseen = await getUnseenCount(table);
-  if (unseen === 0) return { success: true, count: 0 };
-
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from(table)
     .update({ crm_seen: true })
-    .eq("crm_seen", false);
+    .eq("crm_seen", false)
+    .select("id");
 
   if (error) throw new Error(error.message);
 
-  revalidateSeenPaths(table);
-  return { success: true, count: unseen };
+  const count = data?.length ?? 0;
+  if (count > 0) revalidateSeenPaths(table);
+
+  return { success: true, count };
 }
 
 function revalidateSeenPaths(table: TableName) {
   revalidatePath(TABLE_TO_PATH[table]);
   revalidatePath("/", "layout");
+  updateTag(NAV_BADGE_COUNTS_TAG);
+}
+
+function revalidateDashboardCaches() {
+  updateTag(DASHBOARD_STATS_TAG);
+  updateTag(NAV_BADGE_COUNTS_TAG);
 }
 
 export async function getLatestHighlightId(
@@ -195,27 +209,12 @@ export async function createManualBooking(input: ManualBookingInput) {
   revalidatePath("/bookings");
   revalidatePath("/");
   revalidatePath("/", "layout");
+  revalidateDashboardCaches();
   return { success: true };
 }
 
 export async function getNavBadgeCounts(): Promise<Record<string, number>> {
-  const supabase = createServerClient();
-
-  const counts = await Promise.all(
-    SEEN_TRACKED_TABLES.map(async (table) => {
-      const { count, error } = await supabase
-        .from(table)
-        .select("*", { count: "exact", head: true })
-        .eq("crm_seen", false);
-
-      return {
-        path: TABLE_TO_PATH[table],
-        count: error ? 0 : (count ?? 0),
-      };
-    })
-  );
-
-  return Object.fromEntries(counts.map(({ path, count }) => [path, count]));
+  return getCachedNavBadgeCounts();
 }
 
 export async function updateBookingRequestStatus(
@@ -272,6 +271,7 @@ export async function convertBookingRequest(
   revalidatePath(`/booking-requests/${requestId}`);
   revalidatePath("/bookings");
   revalidatePath("/");
+  revalidateDashboardCaches();
 
   return { success: true, booking };
 }
@@ -331,6 +331,7 @@ export async function deleteRecord(table: TableName, id: string) {
   revalidatePath(TABLE_TO_PATH[table]);
   revalidatePath("/");
   revalidatePath("/", "layout");
+  revalidateDashboardCaches();
 
   if (table === "booking_requests") {
     revalidatePath(`/booking-requests/${id}`);
@@ -431,27 +432,69 @@ export async function fetchTablePage(
     .select("*", { count: "exact", head: true });
   countQuery = applySearch(countQuery);
 
-  const { count: totalCount, error: countError } = await countQuery;
-  if (countError) throw new Error(countError.message);
-
-  const total = totalCount ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const safePage = Math.min(Math.max(1, page), totalPages || 1);
-  const from = (safePage - 1) * pageSize;
-  const to = from + pageSize - 1;
-
   const sortCandidates = [
     options?.sort,
     ...ORDER_COLUMNS,
   ].filter(Boolean) as string[];
 
-  for (const orderBy of sortCandidates) {
-    let dataQuery = supabase.from(table).select("*");
-    dataQuery = applySearch(dataQuery);
+  const requestedPage = Math.max(1, page);
+  const from = (requestedPage - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const primarySort = sortCandidates[0] ?? "created_at";
 
-    const { data, error } = await dataQuery
+  let dataQuery = supabase.from(table).select("*");
+  dataQuery = applySearch(dataQuery);
+
+  const [{ count: totalCount, error: countError }, firstDataResult] =
+    await Promise.all([
+      countQuery,
+      dataQuery.order(primarySort, { ascending }).range(from, to),
+    ]);
+
+  if (countError) throw new Error(countError.message);
+
+  const total = totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(requestedPage, totalPages || 1);
+
+  if (!firstDataResult.error) {
+    const safeFrom = (safePage - 1) * pageSize;
+    const safeTo = safeFrom + pageSize - 1;
+
+    if (safePage === requestedPage) {
+      return {
+        data: firstDataResult.data ?? [],
+        total,
+        page: safePage,
+        pageSize,
+        totalPages,
+      };
+    }
+
+    const { data, error } = await applySearch(supabase.from(table).select("*"))
+      .order(primarySort, { ascending })
+      .range(safeFrom, safeTo);
+
+    if (!error) {
+      return {
+        data: data ?? [],
+        total,
+        page: safePage,
+        pageSize,
+        totalPages,
+      };
+    }
+  }
+
+  for (const orderBy of sortCandidates.slice(1)) {
+    const safeFrom = (safePage - 1) * pageSize;
+    const safeTo = safeFrom + pageSize - 1;
+    let fallbackQuery = supabase.from(table).select("*");
+    fallbackQuery = applySearch(fallbackQuery);
+
+    const { data, error } = await fallbackQuery
       .order(orderBy, { ascending })
-      .range(from, to);
+      .range(safeFrom, safeTo);
 
     if (!error) {
       return {
@@ -466,7 +509,10 @@ export async function fetchTablePage(
 
   let fallbackQuery = supabase.from(table).select("*");
   fallbackQuery = applySearch(fallbackQuery);
-  const { data, error } = await fallbackQuery.range(from, to);
+  const { data, error } = await fallbackQuery.range(
+    (safePage - 1) * pageSize,
+    (safePage - 1) * pageSize + pageSize - 1
+  );
 
   if (error) throw new Error(error.message);
 
@@ -504,26 +550,5 @@ export async function fetchRecord(table: string, id: string) {
 }
 
 export async function getDashboardStats() {
-  const results = await Promise.all(
-    CRM_TABLES.map(async (table) => ({
-      table,
-      count: await getTableCount(table),
-    }))
-  );
-
-  const byTable = Object.fromEntries(results.map((r) => [r.table, r.count]));
-
-  return {
-    bookingRequests: byTable.booking_requests ?? 0,
-    bookings: byTable.bookings ?? 0,
-    callbackRequests: byTable.callback_requests ?? 0,
-    contactRequests: byTable.contact_requests ?? 0,
-    careerApplications: byTable.career_applications ?? 0,
-    enterpriseRequests: byTable.enterprise_requests ?? 0,
-    pilotRequests: byTable.pilot_requests ?? 0,
-    dronePilotRegistrations: byTable.drone_pilot_registrations ?? 0,
-    forBusinesses: byTable.for_businesses ?? 0,
-    users: byTable.users ?? 0,
-    bookingsTableMissing: byTable.bookings === null,
-  };
+  return getCachedDashboardStats();
 }

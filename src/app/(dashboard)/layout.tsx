@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { DashboardLiveUpdates } from "@/components/layout/DashboardLiveUpdates";
-import { getNavBadgeCounts } from "@/lib/actions";
-import { getAuthSession, getAuthUser } from "@/lib/auth/session";
+import { getCachedNavBadgeCounts } from "@/lib/cached-queries";
+import { getAuthSession } from "@/lib/auth/session";
 import { createSessionClient } from "@/lib/supabase/session";
 
 export default async function DashboardLayout({
@@ -10,21 +10,15 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getAuthUser();
-  if (!user) redirect("/login");
+  const [session, badgeCounts] = await Promise.all([
+    getAuthSession(),
+    getCachedNavBadgeCounts().catch(() => ({} as Record<string, number>)),
+  ]);
 
-  const session = await getAuthSession();
   if (!session) {
     const supabase = await createSessionClient();
     await supabase.auth.signOut();
     redirect("/login?error=no_profile");
-  }
-
-  let badgeCounts: Record<string, number> = {};
-  try {
-    badgeCounts = await getNavBadgeCounts();
-  } catch {
-    badgeCounts = {};
   }
 
   return (

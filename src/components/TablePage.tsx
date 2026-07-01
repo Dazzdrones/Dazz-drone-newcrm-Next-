@@ -6,7 +6,6 @@ import { AddManualBookingButton } from "@/components/booking/AddManualBookingBut
 import {
   fetchTablePage,
   getLatestHighlightId,
-  getUnseenCount,
   markAllRecordsSeen,
 } from "@/lib/actions";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
@@ -41,45 +40,26 @@ export async function TablePage({
   const canCreateBookings = table === "bookings" && modulePerms.create;
   const canWriteBookings = table === "bookings" && modulePerms.write;
 
-  if (isTracked) {
-    try {
-      await markAllRecordsSeen(table);
-    } catch {
-      // Continue loading the table if marking fails (e.g. column not migrated yet)
-    }
-  }
-
-  let result = {
-    data: [] as Record<string, unknown>[],
-    total: 0,
-    page: 1,
-    pageSize: DEFAULT_PAGE_SIZE,
-    totalPages: 1,
-  };
-
-  try {
-    result = await fetchTablePage(table, page, DEFAULT_PAGE_SIZE, {
+  const [markResult, result, latestHighlightId] = await Promise.all([
+    isTracked
+      ? markAllRecordsSeen(table).catch(() => ({ success: false, count: 0 }))
+      : Promise.resolve({ success: true, count: 0 }),
+    fetchTablePage(table, page, DEFAULT_PAGE_SIZE, {
       search: q,
       sort,
       sortDir: dir,
       searchableColumns: config.searchableColumns,
-    });
-  } catch {
-    result = { ...result, page: page ?? 1 };
-  }
+    }).catch(() => ({
+      data: [] as Record<string, unknown>[],
+      total: 0,
+      page: page ?? 1,
+      pageSize: DEFAULT_PAGE_SIZE,
+      totalPages: 1,
+    })),
+    getLatestHighlightId(table).catch(() => null),
+  ]);
 
-  let unseenCount = 0;
-  let latestHighlightId: string | null = null;
-
-  try {
-    if (isTracked) {
-      unseenCount = await getUnseenCount(table);
-    }
-    latestHighlightId = await getLatestHighlightId(table);
-  } catch {
-    unseenCount = 0;
-    latestHighlightId = null;
-  }
+  const unseenCount = isTracked && markResult.success ? 0 : 0;
 
   return (
     <>

@@ -73,6 +73,25 @@ export async function fetchTeamPermissionsForUser(
   return [...perms];
 }
 
+export async function fetchRolePermissionsForRoleId(
+  roleId: string,
+  supabase: SupabaseClient
+): Promise<string[]> {
+  const { data: rolePerms } = await supabase
+    .from("crm_role_permissions")
+    .select("permission:crm_permissions ( key )")
+    .eq("role_id", roleId);
+
+  return (rolePerms ?? [])
+    .map((row) => {
+      const perm = Array.isArray(row.permission)
+        ? row.permission[0]
+        : row.permission;
+      return perm?.key as string | undefined;
+    })
+    .filter(Boolean) as string[];
+}
+
 export async function fetchRolePermissionsForUser(
   userId: string,
   supabase: SupabaseClient
@@ -85,19 +104,7 @@ export async function fetchRolePermissionsForUser(
 
   if (!profile?.role_id) return [];
 
-  const { data: rolePerms } = await supabase
-    .from("crm_role_permissions")
-    .select("permission:crm_permissions ( key )")
-    .eq("role_id", profile.role_id);
-
-  return (rolePerms ?? [])
-    .map((row) => {
-      const perm = Array.isArray(row.permission)
-        ? row.permission[0]
-        : row.permission;
-      return perm?.key as string | undefined;
-    })
-    .filter(Boolean) as string[];
+  return fetchRolePermissionsForRoleId(profile.role_id, supabase);
 }
 
 export async function fetchUserPermissionOverrides(
